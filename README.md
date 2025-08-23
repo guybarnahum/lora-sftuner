@@ -1,4 +1,4 @@
-# lora-sftuner — LLM Fine-Tuning Toolkit
+# LoRA-SFTuner — LLM Fine-Tuning Toolkit
 
 A modular toolkit for turning your personal archives into a high-quality Supervised Fine-Tuning (SFT) dataset — and (soon) training a LoRA adapter so a base model can “sound like you.”
 

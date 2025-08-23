@@ -1,0 +1,53 @@
+# -----------------------------------------------------------------------------
+# lora-sftuner Configuration File
+#
+# This file defines default parameters for various commands.
+# Settings here are overridden by environment variables and then by
+# command-line flags.
+# -----------------------------------------------------------------------------
+
+# --- Global Defaults ---
+# The base model to use for all operations (train, infer, merge).
+# Can be overridden by the MODEL_NAME environment variable.
+model_name: "google/gemma-3-4b-it"
+
+# --- Training Command Defaults ---
+# These settings are used by the 'lora-sftuner train' command.
+train_defaults:
+  # Path to the training and evaluation datasets.
+  data: "dataset/train.jsonl"
+  eval: "dataset/train_eval.jsonl"
+
+  # Core training parameters
+  epochs: 1
+  cutoff_len: 512
+  bf16: true
+  load_in_4bit: true
+
+  # Hardware-specific presets can be defined below and selected with --preset
+  # Default preset to use if none is specified.
+  default_preset: "default"
+
+
+# --- Hardware & Performance Presets ---
+# Define different sets of parameters for various hardware setups.
+# Select a preset with `lora-sftuner train --preset <name>`
+presets:
+  default:
+    # A balanced default for ~24GB VRAM
+    batch_size: 1
+    grad_accum: 24
+    learning_rate: 0.0002
+
+  t4_gpu:
+    # Optimized for a 16GB VRAM GPU like the NVIDIA T4
+    batch_size: 1
+    grad_accum: 16
+    learning_rate: 0.00015
+
+  rtx4090:
+    # Optimized for a 24GB+ VRAM GPU
+    batch_size: 2
+    grad_accum: 16
+    learning_rate: 0.0002
+

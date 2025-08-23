@@ -1,0 +1,66 @@
+# pyproject.toml for lora-sftuner
+
+[project]
+name = "lora-sftuner"
+version = "0.1.0"
+requires-python = ">=3.10"
+description = "A toolkit for creating personalized language models by fine-tuning on personal data archives."
+
+dependencies = [
+    "numpy<2",
+    "pyarrow>=14,<17",
+    "protobuf<5",
+    "transformers>=4.53.0,<5",
+    "huggingface_hub>=0.24.0",
+    "datasets>=2.18,<3.0",
+    "accelerate>=0.33.0",
+    "peft>=0.13.0",
+    "trl>=0.9.6",
+    "sentencepiece",
+    "safetensors>=0.4.3",
+    "einops>=0.7.0",
+    "tqdm>=4.66.0",
+    "python-dotenv>=1.0.0",
+    "typer[all]>=0.12.3",
+    "PyYAML>=6.0",
+    "requests>=2.31.0" # Added for the Twitter API importer
+]
+
+[project.optional-dependencies]
+# Defines an "extra" for CUDA environments (e.g., cloud GPU VMs).
+# Install with: pip install --index-url https://download.pytorch.org/whl/cu121 -e ".[cuda]"
+cuda = [
+    "torch==2.4.1",
+    "bitsandbytes>=0.43.3", # GPU-specific library for 4-bit training
+]
+
+# Defines an "extra" for CPU-only environments (including macOS).
+# Install with: pip install -e ".[cpu]"
+cpu = [
+    # Installs torch v2.2.2 specifically on macOS systems.
+    "torch==2.2.2; sys_platform == 'darwin'",
+    # Installs torch v2.4.1 on other non-macOS CPU systems (like a Linux machine without a GPU).
+    "torch==2.4.1; sys_platform != 'darwin'",
+]
+
+# Defines an "extra" for the document importer.
+# Install with: pip install -e ".[docs]"
+docs = [
+    "beautifulsoup4>=4.12.3",
+    "python-docx>=1.1.2",
+    "PyMuPDF>=1.24.5",
+]
+
+
+[project.scripts]
+# This creates the `lora-sftuner` command and points it to the `app` object
+# in the `lora_sftuner/cli.py` file.
+lora-sftuner = "lora_sftuner.cli:app"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+

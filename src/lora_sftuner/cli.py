@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # Import all the project's modules
 from .importers import docs_importer, sql_importer, twitter_api_importer, twitter_importer
-from . import sft_unify_and_split
+from .processing import sft_unify_and_split
 
 # --- Configuration ---
 APP_DIR = Path(__file__).resolve().parent.parent.parent

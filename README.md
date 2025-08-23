@@ -1,10 +1,10 @@
 # LoRA-SFTuner — LLM Fine-Tuning Toolkit
+## Raw data → Unified dataset → Train/Eval split → Train LoRA → Merge/Export
 
-A modular toolkit for turning your personal archives into a high-quality Supervised Fine-Tuning (SFT) dataset — and (soon) training a LoRA adapter so a base model can “sound like you.”
+**lora-sftuner** is a modular toolkit for creating personalized language models. It provides an end-to-end pipeline to import data from your archives, turn it into a high-quality Supervised Fine-Tuning (SFT) dataset, **train a LoRA adapter**, and optionally **merge/export** for inference tools like **Ollama**.
 
-* **Status:** Data pipeline ✅ • LoRA training 🚧 *coming soon*
 * **Python:** 3.11–3.12
-* **Platforms:** macOS / Linux (Windows via WSL)
+* **Platforms:** macOS / Linux (+GPU)(Windows via WSL untested)
 
 ---
 
@@ -16,50 +16,46 @@ A modular toolkit for turning your personal archives into a high-quality Supervi
    * [Install](#install)
    * [Clean Up](#clean-up)
 3. [Configuration](#configuration)
-4. [Usage: The Data Pipeline](#usage-the-data-pipeline)
+4. [The Data Pipeline](#the-data-pipeline)
 
    * [Step 1: Import](#step-1-import)
    * [Step 2: Unify](#step-2-unify)
    * [Step 3: Split](#step-3-split)
-5. [SQL Schema Mapping Example](#sql-schema-mapping-example)
-6. [Notes & Tips](#notes--tips)
-7. [Roadmap](#roadmap)
-8. [Contributing & License](#contributing--license)
+5. [Training & Using Your Model](#training--using-your-model)
+
+   * [Training](#training)
+   * [Inference](#inference)
+   * [Merging & Exporting for Ollama](#merging--exporting-for-ollama)
+6. [SQL Schema Mapping Example](#sql-schema-mapping-example)
+7. [Notes & Tips](#notes--tips)
 
 ---
 
 ## Features
 
-* **Modular Importers**
-  Incrementally ingest from multiple sources:
+* **Modular Importer System**
+  Incremental importers for:
 
-  * **Twitter**
+  * **Twitter** (archive import & v2 API sync)
+  * **Documents** (`.txt`, `.md`, `.html`, `.docx`, `.pdf`)
+  * **SQL databases** (forum/structured data via sidecar **YAML** schema)
 
-    * One-time archive import.
-    * Incremental sync via Twitter v2 API.
-  * **Documents**
+* **Intelligent Data Processing**
 
-    * Scans directories for `.txt`, `.md`, `.html`, `.docx`, `.pdf`.
-    * Only processes new/changed content.
-  * **SQL Databases**
-
-    * Converts forum threads or other structured content using a flexible, sidecar **YAML** schema mapping.
-
-* **Intelligent Processing**
-
-  * Builds **conversational dialogs** from reply chains and Twitter threads.
+  * Builds conversational dialogs from reply chains & Twitter threads
+  * Cleans HTML and filters low-quality content
 
 * **Robust Setup**
 
-  * `setup.sh` handles Python version checks, virtualenv creation, and installs core + optional extras (e.g., PDF/DOCX readers).
+  * `setup.sh` checks Python, creates a virtualenv, and installs core + optional extras
 
 * **Hierarchical Configuration**
 
-  * Project defaults in `config.yaml`, secrets in `.env`, quick overrides via CLI flags.
+  * Project defaults in `config.yaml`, secrets in `.env`, quick overrides via CLI flags
 
-* **End-to-End Data Pipeline**
+* **Complete Workflow**
 
-  * Clear workflow from **raw data → unified dataset → train/eval splits**.
+  * **Raw data → Unified dataset → Train/Eval split → Train LoRA → Merge/Export**
 
 ---
 
@@ -77,12 +73,12 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-This will:
+What it does:
 
-* Discover a compatible Python (prefers 3.11 or 3.12).
-* Create a virtual environment at `./.venv`.
-* Install required dependencies (CPU or CUDA variants).
-* Offer to install optional document processors (`.pdf`, `.docx`, etc.).
+* Finds a compatible Python (prefers 3.11/3.12)
+* Creates a virtual environment at `./.venv`
+* Installs required dependencies (CPU/CUDA variants)
+* Offers optional document parsers (`.pdf`, `.docx`, etc.)
 
 ### Clean Up
 
@@ -97,71 +93,64 @@ chmod +x clean.sh
 
 ## Configuration
 
-Before running any commands, copy the example config files:
+Copy the example config files, then fill in your details:
 
 ```bash
 cp config.yaml.example config.yaml
 cp .env.example .env
 ```
 
-* **`.env`** — secrets & user-specific settings. Fill these in:
+* **`.env`** — secrets & user-specific settings (required)
 
   * `HUGGINGFACE_HUB_TOKEN`
   * `TWITTER_BEARER_TOKEN`
   * `TWITTER_USERNAME`
-* **`config.yaml`** — project defaults (base model name, training presets, paths, etc.). Review and adjust as needed.
+* **`config.yaml`** — defaults for base model, training presets, paths, etc.
+  Adjust to match your hardware and preferences.
 
 ---
 
-## Usage: The Data Pipeline
+## The Data Pipeline
 
-The CLI centers on three steps: **Import → Unify → Split**. All commands use the `lora-sftuner` entrypoint.
-
-> Output artifacts are written under `dataset/`.
+The first stage is a three-step process: **Import → Unify → Split**.
+Each importer produces a `.jsonl` file in `dataset/`.
 
 ### Step 1: Import
 
-Run one or more importers. Each produces a `.jsonl` file in `dataset/`.
+Run one or more importers:
 
-#### Twitter Archive (one-time bulk import)
+* **Twitter Archive**
 
-```bash
-lora-sftuner twitter-import /path/to/your/twitter-archive
-```
+  ```bash
+  lora-sftuner twitter-import /path/to/your/twitter-archive
+  ```
 
-#### Twitter API (incremental sync)
+* **Twitter API Sync** (incremental; uses state to resume)
 
-Uses a state file to resume from the last fetch.
+  ```bash
+  # Requires TWITTER_USERNAME and TWITTER_BEARER_TOKEN in .env
+  lora-sftuner twitter-api-import
+  ```
 
-```bash
-# Ensure TWITTER_USERNAME and TWITTER_BEARER_TOKEN are set in .env
-lora-sftuner twitter-api-import
-```
+* **Documents** (incremental scan)
 
-#### Documents (incremental scan)
+  ```bash
+  # If you skipped docs extras during setup:
+  # pip install -e ".[docs]"
 
-Scans a directory and processes only new/changed files.
+  lora-sftuner docs-import /path/to/your/documents/
+  ```
 
-```bash
-# If you didn't install docs extras during setup:
-# pip install -e ".[docs]"
+* **SQL Database** (requires sidecar YAML mapping)
 
-lora-sftuner docs-import /path/to/your/documents/
-```
-
-#### SQL Database
-
-Converts threads from a SQL DB using a sidecar YAML that maps your schema.
-For `my_forum.db`, create `my_forum.yaml` in the same directory.
-
-```bash
-# --nick must match your username in the database
-lora-sftuner sql-import /path/to/my_forum.db --nick "YourUsername"
-```
+  ```bash
+  # --nick must match your username in the DB
+  lora-sftuner sql-import /path/to/my_forum.db --nick "YourUsername"
+  ```
 
 ### Step 2: Unify
 
-Merge all `.jsonl` files in `dataset/` into a single normalized dataset.
+Merge all generated `.jsonl` files into a single, cleaned dataset:
 
 ```bash
 lora-sftuner unify --out dataset/unified.jsonl
@@ -169,7 +158,7 @@ lora-sftuner unify --out dataset/unified.jsonl
 
 ### Step 3: Split
 
-Create train/eval splits from the unified dataset.
+Create your final training and evaluation sets:
 
 ```bash
 lora-sftuner split-eval dataset/unified.jsonl \
@@ -178,13 +167,68 @@ lora-sftuner split-eval dataset/unified.jsonl \
   --eval-pct  0.05
 ```
 
-You’re now ready for the next stage: **training**.
+---
+
+## Training & Using Your Model
+
+Once your dataset is prepared, you can **train** a LoRA adapter, **test** it, and **merge/export** for deployment.
+
+### Training
+
+The trainer reads `train.jsonl` and `eval.jsonl` by default and uses your hierarchical configuration.
+
+```bash
+# Train using defaults from config.yaml
+lora-sftuner train
+
+# Train with a specific hardware preset defined in config.yaml
+lora-sftuner train --preset t4_gpu
+
+# Override settings via CLI flags
+lora-sftuner train --epochs 3 --lr 1e-4
+```
+
+> The trained LoRA adapter is saved to the path configured in `config.yaml`
+> (default: `out/lora-adapter`).
+
+### Inference
+
+Test your trained adapter:
+
+```bash
+# Uses adapter path from config.yaml by default
+lora-sftuner infer "Write a short paragraph about the future of AI."
+
+# Or specify a different adapter directory
+lora-sftuner infer "Tell me a story." --adapter-dir out/another-adapter
+```
+
+### Merging & Exporting for Ollama
+
+Merge the LoRA adapter into the base model to create a standalone, fine-tuned model.
+You can also produce GGUF + a Modelfile for Ollama in one step.
+
+```bash
+# Merge the adapter into the base model
+lora-sftuner merge
+
+# Merge and convert to GGUF (example quantization)
+lora-sftuner merge --gguf-quantize q4_k_m
+```
+
+This creates a directory (default: `out/merged-model`) with merged weights and a `Modelfile`.
+Run with Ollama:
+
+```bash
+ollama create my-personal-model -f out/merged-model/Modelfile
+ollama run my-personal-model "Say something in my style."
+```
 
 ---
 
 ## SQL Schema Mapping Example
 
-Create a YAML file matching your DB filename. Example `my_forum.yaml`:
+Create a YAML file with the **same base name** as your DB (e.g., `my_forum.yaml` next to `my_forum.db`):
 
 ```yaml
 schema_mapping:
@@ -199,36 +243,17 @@ schema_mapping:
     created_at: "date"
 ```
 
-Place this YAML next to `my_forum.db` so the importer can detect it automatically.
-
 ---
 
 ## Notes & Tips
 
-* **Virtualenv activation:**
-  `source .venv/bin/activate` (bash/zsh) before running commands manually.
-* **Docs extras:**
-  If you skipped document parsers during setup, install later with:
+* **Virtualenv activation:** `source .venv/bin/activate` before running commands manually.
+* **Docs extras:** If you skipped document parsers during setup, install later:
 
   ```bash
   pip install -e ".[docs]"
   ```
-* **Environment variables:**
-  Missing tokens will cause importer errors. Confirm your `.env` values and reload your shell or export them.
-* **Idempotency:**
-  Importers track state and only process new/changed content where applicable.
-
----
-
-## Roadmap
-
-* **LoRA Training Commands:** configure base model, load dataset splits, train & export an adapter.
-* **More Importers:** email, chat platforms, RSS, bookmarking services.
-* **Quality Tools:** deduplication, safety filters, style heuristics.
-
----
-
-## Contributing & License
-
-PRs and issues are welcome! Please open an issue for discussion before large changes.
+* **Idempotency:** Importers track state and only process new/changed content where applicable.
+* **Environment variables:** Missing tokens in `.env` will cause importer errors—verify and reload your shell.
+* **CLI help:** Use `lora-sftuner <command> --help` to see all options and overrides.
 

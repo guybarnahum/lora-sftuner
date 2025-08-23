@@ -1,10 +1,10 @@
 #!/bin/bash
 #
 # This script cleans up the lora-sftuner project by:
-# 1. Uninstalling the pip package if a virtual environment exists.
-# 2. Deleting the Python virtual environment directory (.venv).
-# 3. Removing common Python cache and build artifact directories.
-# 4. Optionally, deleting output directories for models and data.
+# 1. Logging out of the Hugging Face CLI.
+# 2. Uninstalling the pip package.
+# 3. Deleting the Python virtual environment directory (.venv).
+# 4. Removing common Python cache and build artifact directories.
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
@@ -13,17 +13,25 @@ PROJECT_NAME="lora-sftuner"
 
 echo "--- Starting cleanup for ${PROJECT_NAME} ---"
 
-# --- Step 1: Uninstall the pip package ---
+# --- Step 1: De-authenticate and Uninstall ---
 if [ -d "$VENV_DIR" ]; then
-    echo "--- Uninstalling pip package from $VENV_DIR ---"
-    # Activate the environment to ensure we use the correct pip
+    echo "--- Activating environment for cleanup ---"
     # shellcheck source=/dev/null
     source "$VENV_DIR/bin/activate"
-    # Use pip to properly uninstall the package in editable mode
+    
+    # Check if huggingface-cli is installed before trying to log out
+    if command -v huggingface-cli &> /dev/null; then
+        echo "--- Logging out of Hugging Face CLI ---"
+        huggingface-cli logout
+    else
+        echo "--- huggingface-cli not found, skipping logout ---"
+    fi
+    
+    echo "--- Uninstalling pip package ---"
     pip uninstall -y "$PROJECT_NAME"
     deactivate
 else
-    echo "--- Virtual environment not found, skipping pip uninstall ---"
+    echo "--- Virtual environment not found, skipping de-authentication and uninstall ---"
 fi
 
 # --- Step 2: Remove Python artifacts and virtual environment ---
@@ -48,4 +56,3 @@ find . -type d -name "__pycache__" -exec rm -r {} +
 # fi
 
 echo "✅ Cleanup complete!"
-

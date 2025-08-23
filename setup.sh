@@ -51,6 +51,7 @@ echo "--- Installing project dependencies ---"
 # Check for nvidia-smi to determine if a GPU is present
 if command -v nvidia-smi &> /dev/null; then
     echo "✅ NVIDIA GPU detected. Installing with CUDA support..."
+    pip install --extra-index-url https://download.pytorch.org/whl/cu121 -e ".[cuda]"
 else
     echo "🖥️ No NVIDIA GPU detected. Installing with CPU support..."
     # Install with the CPU extra

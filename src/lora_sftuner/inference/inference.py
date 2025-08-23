@@ -11,6 +11,15 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer, BitsAndBytesConfig
 from peft import PeftModel
 
+# --- FIX: Suppress PyTorch Dynamo errors ---
+# This helps prevent crashes with incompatible attention implementations.
+os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+try:
+    import torch._dynamo as dynamo
+    dynamo.config.suppress_errors = True
+except ImportError:
+    pass
+
 # --- Model & Tokenizer Loading ---
 
 def _load_model_and_tokenizer(model_name: str, load_in_4bit: bool, attn_impl: str, token: str):
@@ -45,8 +54,9 @@ def run_inference(config: Dict[str, Any]):
     """Runs streaming inference with a base model and an optional LoRA adapter."""
     token = os.getenv("HUGGINGFACE_HUB_TOKEN")
     
+    # --- FIX: Default to 'eager' attention for better stability ---
     base_model, tokenizer = _load_model_and_tokenizer(
-        config["model_name"], config.get("load_in_4bit", False), config.get("attn", "sdpa"), token
+        config["model_name"], config.get("load_in_4bit", False), config.get("attn", "eager"), token
     )
 
     if config.get("adapter_dir"):
@@ -75,17 +85,21 @@ def run_inference(config: Dict[str, Any]):
     thread = threading.Thread(target=model.generate, kwargs=generation_kwargs)
     thread.start()
 
+    # --- ADDED: Print model and adapter info before streaming ---
+    print("\n--- Configuration ---")
     base_model_name = model.config._name_or_path
-    # If it's a PeftModel, the actual base model is nested
     if hasattr(model, "base_model"):
         base_model_name = model.base_model.model.config._name_or_path
     
     print(f"Base Model: {base_model_name}")
     if config.get("adapter_dir"):
         print(f"Adapter:    {config['adapter_dir']}")
-
+    print("----------------------\n")
+    
+    print("--- Model Response ---")
     for new_text in streamer:
         print(new_text, end="", flush=True)
+    print("\n----------------------")
     
 # --- Merging and Conversion ---
 
@@ -150,5 +164,3 @@ TEMPLATE "{{ .System }}<|start_header_id|>user<|end_header_id|>
     modelfile_path.write_text(modelfile_content.strip())
     print(f"✅ Ollama Modelfile created at: {modelfile_path}")
     print(f"\nTo run with Ollama, use: ollama create {model_path.name} -f {modelfile_path}")
-
-

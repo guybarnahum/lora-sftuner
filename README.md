@@ -1,22 +1,192 @@
-lora-sftuner: Your Personal AI Finetuning Toolkitlora-sftuner is a comprehensive toolkit for creating personalized language models. It provides a complete pipeline to import data from your personal archives, process it into a high-quality Supervised Finetuning (SFT) dataset, and (soon) train a LoRA adapter to make a base model sound just like you.This project is designed to be modular and extensible, allowing you to easily add new data sources and build a rich, multi-faceted dataset that truly reflects your unique style and knowledge.FeaturesModular Importer System: Easily ingest data from various sources with dedicated, incremental importers.Twitter: Supports both one-time archive imports and incremental syncs from the v2 API.Documents: Scans directories for .txt, .md, .html, .docx, and .pdf files, only processing new or changed content.SQL Databases: Converts forum threads or other structured data using a flexible schema mapping defined in a sidecar YAML file.Intelligent Data Processing: Automatically creates conversational dialogs from reply chains and Twitter threads.Robust Setup: A simple setup script handles Python version checking, virtual environment creation, and installation of core and optional dependencies.Hierarchical Configuration: Manage settings easily with a combination of a global config.yaml for project defaults, a .env file for secrets, and command-line flags for overrides.Complete Data Pipeline: A clear, step-by-step workflow from raw data to a unified, split dataset ready for training.1. Setup and InstallationGetting started with lora-sftuner is handled by two simple scripts.InstallationThe setup.sh script automates the entire installation process.# Make the script executable
+# lora-sftuner — LLM Fine-Tuning Toolkit
+
+A modular toolkit for turning your personal archives into a high-quality Supervised Fine-Tuning (SFT) dataset — and (soon) training a LoRA adapter so a base model can “sound like you.”
+
+* **Status:** Data pipeline ✅ • LoRA training 🚧 *coming soon*
+* **Python:** 3.11–3.12
+* **Platforms:** macOS / Linux (Windows via WSL)
+
+---
+
+## Table of Contents
+
+1. [Features](#features)
+2. [Quick Start](#quick-start)
+
+   * [Install](#install)
+   * [Clean Up](#clean-up)
+3. [Configuration](#configuration)
+4. [Usage: The Data Pipeline](#usage-the-data-pipeline)
+
+   * [Step 1: Import](#step-1-import)
+   * [Step 2: Unify](#step-2-unify)
+   * [Step 3: Split](#step-3-split)
+5. [SQL Schema Mapping Example](#sql-schema-mapping-example)
+6. [Notes & Tips](#notes--tips)
+7. [Roadmap](#roadmap)
+8. [Contributing & License](#contributing--license)
+
+---
+
+## Features
+
+* **Modular Importers**
+  Incrementally ingest from multiple sources:
+
+  * **Twitter**
+
+    * One-time archive import.
+    * Incremental sync via Twitter v2 API.
+  * **Documents**
+
+    * Scans directories for `.txt`, `.md`, `.html`, `.docx`, `.pdf`.
+    * Only processes new/changed content.
+  * **SQL Databases**
+
+    * Converts forum threads or other structured content using a flexible, sidecar **YAML** schema mapping.
+
+* **Intelligent Processing**
+
+  * Builds **conversational dialogs** from reply chains and Twitter threads.
+
+* **Robust Setup**
+
+  * `setup.sh` handles Python version checks, virtualenv creation, and installs core + optional extras (e.g., PDF/DOCX readers).
+
+* **Hierarchical Configuration**
+
+  * Project defaults in `config.yaml`, secrets in `.env`, quick overrides via CLI flags.
+
+* **End-to-End Data Pipeline**
+
+  * Clear workflow from **raw data → unified dataset → train/eval splits**.
+
+---
+
+## Quick Start
+
+### Install
+
+The `setup.sh` script automates everything.
+
+```bash
+# Make the script executable
 chmod +x setup.sh
 
-# Run the setup script
+# Run the setup
 ./setup.sh
-This script will:Find a compatible Python version (3.11 or 3.12 is preferred).Create a virtual environment in ./.venv.Install all required core dependencies for your platform (CPU or CUDA).Ask you if you want to install optional dependencies for document processing (.pdf, .docx, etc.).Cleaning UpTo completely remove the virtual environment and uninstall the package, use the clean.sh script.chmod +x clean.sh
+```
+
+This will:
+
+* Discover a compatible Python (prefers 3.11 or 3.12).
+* Create a virtual environment at `./.venv`.
+* Install required dependencies (CPU or CUDA variants).
+* Offer to install optional document processors (`.pdf`, `.docx`, etc.).
+
+### Clean Up
+
+Remove the virtual environment and uninstall the package:
+
+```bash
+chmod +x clean.sh
 ./clean.sh
-2. ConfigurationBefore running any commands, you should configure your project by copying the example files:cp config.yaml.example config.yaml
+```
+
+---
+
+## Configuration
+
+Before running any commands, copy the example config files:
+
+```bash
+cp config.yaml.example config.yaml
 cp .env.example .env
-.env: This file is for your secrets (like HUGGINGFACE_HUB_TOKEN and TWITTER_BEARER_TOKEN) and user-specific settings (TWITTER_USERNAME). You must fill this out.config.yaml: This file contains all the project defaults, such as the base model name, hardware presets for training, and default paths. You can review and adjust these settings as needed.3. Usage: The Data PipelineThe core workflow is a three-step process: Import, Unify, and Split. All commands are run through the lora-sftuner CLI.Step 1: Import Your DataRun one or more of the following commands to process your raw data archives. Each command will generate a .jsonl file in the dataset/ directory.Twitter Archive (One-Time)Use this for your initial bulk import from a downloaded Twitter archive.lora-sftuner twitter-import /path/to/your/twitter-archive
-Twitter API (Incremental Sync)Use this to periodically fetch new tweets. It uses a state file to remember where it left off.# Make sure TWITTER_USERNAME and TWITTER_BEARER_TOKEN are set in your .env file
+```
+
+* **`.env`** — secrets & user-specific settings. Fill these in:
+
+  * `HUGGINGFACE_HUB_TOKEN`
+  * `TWITTER_BEARER_TOKEN`
+  * `TWITTER_USERNAME`
+* **`config.yaml`** — project defaults (base model name, training presets, paths, etc.). Review and adjust as needed.
+
+---
+
+## Usage: The Data Pipeline
+
+The CLI centers on three steps: **Import → Unify → Split**. All commands use the `lora-sftuner` entrypoint.
+
+> Output artifacts are written under `dataset/`.
+
+### Step 1: Import
+
+Run one or more importers. Each produces a `.jsonl` file in `dataset/`.
+
+#### Twitter Archive (one-time bulk import)
+
+```bash
+lora-sftuner twitter-import /path/to/your/twitter-archive
+```
+
+#### Twitter API (incremental sync)
+
+Uses a state file to resume from the last fetch.
+
+```bash
+# Ensure TWITTER_USERNAME and TWITTER_BEARER_TOKEN are set in .env
 lora-sftuner twitter-api-import
-Documents (Incremental)Scans a directory for documents and only processes new or changed files.# First, ensure you have installed the optional dependencies during setup.
-# If not, run: pip install -e ".[docs]"
+```
+
+#### Documents (incremental scan)
+
+Scans a directory and processes only new/changed files.
+
+```bash
+# If you didn't install docs extras during setup:
+# pip install -e ".[docs]"
 
 lora-sftuner docs-import /path/to/your/documents/
-SQL DatabaseConverts threads from a SQL database. This command requires a sidecar .yaml file that maps your database schema. For an input file named my_forum.db, you must create a my_forum.yaml in the same directory.# The --nick must match your username in the database
+```
+
+#### SQL Database
+
+Converts threads from a SQL DB using a sidecar YAML that maps your schema.
+For `my_forum.db`, create `my_forum.yaml` in the same directory.
+
+```bash
+# --nick must match your username in the database
 lora-sftuner sql-import /path/to/my_forum.db --nick "YourUsername"
-SQL Schema ConfigurationThe importer needs to know how to interpret your database. Create a .yaml file with the same name as your database file (e.g., my_forum.yaml) and define the schema mapping:# Example: my_forum.yaml
+```
+
+### Step 2: Unify
+
+Merge all `.jsonl` files in `dataset/` into a single normalized dataset.
+
+```bash
+lora-sftuner unify --out dataset/unified.jsonl
+```
+
+### Step 3: Split
+
+Create train/eval splits from the unified dataset.
+
+```bash
+lora-sftuner split-eval dataset/unified.jsonl \
+  --train-out dataset/train.jsonl \
+  --eval-out  dataset/eval.jsonl  \
+  --eval-pct  0.05
+```
+
+You’re now ready for the next stage: **training**.
+
+---
+
+## SQL Schema Mapping Example
+
+Create a YAML file matching your DB filename. Example `my_forum.yaml`:
+
+```yaml
 schema_mapping:
   table_name: "msg_tbl"
   column_names:
@@ -25,12 +195,40 @@ schema_mapping:
     root_id: "root_id"
     author_nick: "nick"
     content_body: "body"
-    content_title: "title" # Optional: remove if your table has no title column
+    content_title: "title"   # Optional; remove if not present
     created_at: "date"
-Step 2: Unify DatasetsAfter importing from one or more sources, combine them into a single, normalized dataset.# This command finds all .jsonl files in dataset/ and merges them
-lora-sftuner unify --out dataset/unified.jsonl
-Step 3: Split for TrainingFinally, split your unified dataset into training and evaluation sets.lora-sftuner split-eval dataset/unified.jsonl \
-  --train-out dataset/train.jsonl \
-  --eval-out dataset/eval.jsonl \
-  --eval-pct 0.05
-You are now ready for the next stage: training
+```
+
+Place this YAML next to `my_forum.db` so the importer can detect it automatically.
+
+---
+
+## Notes & Tips
+
+* **Virtualenv activation:**
+  `source .venv/bin/activate` (bash/zsh) before running commands manually.
+* **Docs extras:**
+  If you skipped document parsers during setup, install later with:
+
+  ```bash
+  pip install -e ".[docs]"
+  ```
+* **Environment variables:**
+  Missing tokens will cause importer errors. Confirm your `.env` values and reload your shell or export them.
+* **Idempotency:**
+  Importers track state and only process new/changed content where applicable.
+
+---
+
+## Roadmap
+
+* **LoRA Training Commands:** configure base model, load dataset splits, train & export an adapter.
+* **More Importers:** email, chat platforms, RSS, bookmarking services.
+* **Quality Tools:** deduplication, safety filters, style heuristics.
+
+---
+
+## Contributing & License
+
+PRs and issues are welcome! Please open an issue for discussion before large changes.
+

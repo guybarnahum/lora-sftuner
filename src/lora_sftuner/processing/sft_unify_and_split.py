@@ -44,10 +44,13 @@ def _map_role(role: str) -> str:
     return "user"
 
 def _enforce_alternation(cleaned: List[Dict[str, str]]) -> Optional[List[Dict[str, str]]]:
-    """Enforces a [system?, user, assistant, user, ...] structure."""
+    """
+    Enforces a [system?, user, assistant, user, ...] structure.
+    This version is more careful about preserving multi-turn conversations.
+    """
     if not cleaned: return None
-    
-    # Merge consecutive same-role messages
+
+    # 1. Merge true consecutive messages of the same role
     merged = []
     for msg in cleaned:
         if merged and merged[-1]["role"] == msg["role"]:
@@ -55,19 +58,31 @@ def _enforce_alternation(cleaned: List[Dict[str, str]]) -> Optional[List[Dict[st
         else:
             merged.append(msg)
     
-    # Ensure first message is user or system
-    if merged[0]["role"] == "assistant":
-        merged.insert(0, {"role": "user", "content": "..."}) # Synthetic prompt
+    # 2. Ensure the conversation starts with a non-assistant message
+    if not merged or merged[0]["role"] == "assistant":
+        # Insert a synthetic prompt to fix conversations starting with the assistant
+        merged.insert(0, {"role": "user", "content": "..."})
 
-    # Drop trailing user message
-    if len(merged) > 1 and merged[-1]["role"] == "user":
-        merged.pop()
+    # 3. Ensure the conversation ends with an assistant message
+    if merged[-1]["role"] != "assistant":
+        merged.pop() # Drop trailing user/system message
+
+    # 4. Final check for strict user/assistant alternation
+    final_chat = []
+    if merged and merged[0]["role"] == "system":
+        final_chat.append(merged.pop(0))
         
-    # Final check for valid structure
-    if len(merged) < 2 or merged[-1]["role"] != "assistant":
+    if not merged or len(merged) % 2 != 0: # Must be an even number of user/assistant turns
         return None
         
-    return merged
+    for i, msg in enumerate(merged):
+        expected_role = "user" if i % 2 == 0 else "assistant"
+        if msg["role"] != expected_role:
+            return None # The sequence is broken
+        final_chat.append(msg)
+
+    return final_chat if len(final_chat) >= 2 else None
+
 
 def _normalize_row(row: Dict[str, Any], keep_keys: List[str]) -> Optional[Dict[str, Any]]:
     """Normalizes a single JSONL row to the required SFT format."""
@@ -91,17 +106,20 @@ def _normalize_row(row: Dict[str, Any], keep_keys: List[str]) -> Optional[Dict[s
             
     return norm_row
 
+# --- Data Quality Analysis ---
+
+def _is_generic_prompt(prompt: str) -> bool:
+    """Determines if a user prompt is a generic placeholder."""
+    p_lower = prompt.lower()
+    return p_lower == "..." or p_lower.startswith("write a")
 
 def _analyze_dataset_quality(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Analyzes the unified dataset and returns a dictionary of metrics."""
-    if not rows:
-        return {}
+    if not rows: return {}
 
     source_counts = Counter(row.get("source_file", "unknown") for row in rows)
     
-    single_turn_count = 0
-    multi_turn_count = 0
-    meaningful_prompts = 0
+    turn_counts = Counter()
     generic_prompts = 0
     total_prompt_len = 0
     total_response_len = 0
@@ -110,46 +128,41 @@ def _analyze_dataset_quality(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         messages = row.get("messages", [])
         user_turns = [m for m in messages if m["role"] == "user"]
         
-        if len(user_turns) == 1:
-            single_turn_count += 1
-        else:
-            multi_turn_count += 1
+        turn_counts[len(user_turns)] += 1
             
-        last_prompt = user_turns[-1]["content"] if user_turns else ""
-        if last_prompt == "..." or last_prompt.lower().startswith("write a"):
+        if user_turns and _is_generic_prompt(user_turns[-1]["content"]):
             generic_prompts += 1
-        else:
-            meaningful_prompts += 1
             
-        total_prompt_len += len(last_prompt)
-        total_response_len += len(messages[-1]["content"])
+        total_prompt_len += sum(len(m["content"]) for m in user_turns)
+        total_response_len += sum(len(m["content"]) for m in messages if m["role"] == "assistant")
 
     total = len(rows)
+    single_turn_count = turn_counts.get(1, 0)
+    multi_turn_count = total - single_turn_count
+    
     return {
         "total_examples": total,
         "source_composition": {k: v / total for k, v in source_counts.items()},
         "single_turn_pct": single_turn_count / total,
         "multi_turn_pct": multi_turn_count / total,
-        "meaningful_prompt_pct": meaningful_prompts / total,
         "generic_prompt_pct": generic_prompts / total,
-        "avg_prompt_len": total_prompt_len / total,
-        "avg_response_len": total_response_len / total,
+        "avg_prompt_len": total_prompt_len / total if total > 0 else 0,
+        "avg_response_len": total_response_len / total if total > 0 else 0,
     }
 
 def _print_quality_report(metrics: Dict[str, Any]):
     """Prints the formatted data quality report."""
-    if not metrics:
-        return
+    if not metrics: return
 
     print("\n--- 📊 Data Quality Report ---")
     print("Source Composition:")
-    for source, pct in metrics["source_composition"].items():
+    for source, pct in sorted(metrics["source_composition"].items()):
         print(f"  - {source:<25}: {pct: >7.1%}")
 
     print("\nConversational Quality:")
     print(f"  - Single-Turn (Q&A):   {metrics['single_turn_pct']: >7.1%}")
     print(f"  - Multi-Turn (Dialog): {metrics['multi_turn_pct']: >7.1%}")
-    print(f"  - Meaningful Prompts:  {metrics['meaningful_prompt_pct']: >7.1%}")
+    print(f"  - Meaningful Prompts:  {(1.0 - metrics['generic_prompt_pct']): >7.1%}")
     print(f"  - Generic Prompts:     {metrics['generic_prompt_pct']: >7.1%}")
 
     print("\nLength Statistics (characters):")
@@ -161,7 +174,7 @@ def _print_quality_report(metrics: Dict[str, Any]):
         print(f"  - High Generic Prompt Ratio ({metrics['generic_prompt_pct']:.1%}): A majority of your data consists of")
         print("    standalone statements with a generic prompt. This can weaken the model's")
         print("    ability to follow specific instructions.")
-        print("    Suggestion: Curate more direct Q&A examples in a separate .jsonl file.")
+        print("    Suggestion: Use the --drop-generic-prompts flag or curate more direct Q&A examples.")
     print("--------------------------------")
 
 
@@ -174,7 +187,7 @@ def _iter_jsonl(paths: List[pathlib.Path]) -> Iterable[Dict[str, Any]]:
                 if line.strip():
                     try:
                         row = json.loads(line)
-                        row["source_file"] = p.name # Add source file for analysis
+                        row["source_file"] = p.name
                         yield row
                     except json.JSONDecodeError:
                         continue
@@ -183,7 +196,6 @@ def _save_jsonl(p: pathlib.Path, rows: List[Dict[str, Any]]):
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
         for ex in rows:
-            # Remove the temporary source_file key before writing
             ex.pop("source_file", None)
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
 
@@ -195,6 +207,7 @@ def unify_datasets(
     shuffle: bool,
     seed: int,
     keep_keys: List[str],
+    drop_generic_prompts: bool,
 ):
     """Unifies multiple JSONL datasets into a single, normalized file."""
     all_rows = list(tqdm(_iter_jsonl(input_paths), desc="Reading files"))
@@ -204,6 +217,12 @@ def unify_datasets(
         norm_row = _normalize_row(row, keep_keys + ["source_file"])
         if not norm_row: continue
         
+        # Optionally drop rows with generic prompts
+        if drop_generic_prompts:
+            user_turns = [m for m in norm_row["messages"] if m["role"] == "user"]
+            if user_turns and _is_generic_prompt(user_turns[-1]["content"]):
+                continue
+
         h = _hash_for_dedup(norm_row["messages"])
         if h in seen_hashes: continue
         
@@ -213,9 +232,7 @@ def unify_datasets(
     if shuffle:
         random.Random(seed).shuffle(kept)
 
-    # Analyze and report on the final, cleaned dataset
     quality_metrics = _analyze_dataset_quality(kept)
-    
     _save_jsonl(output_path, kept)
     print(f"✅ Unified {len(kept)} rows from {len(all_rows)} inputs into {output_path}")
 
@@ -240,10 +257,10 @@ def split_dataset(
     random.Random(seed).shuffle(rows)
     
     n_eval = max(1, int(round(len(rows) * eval_pct)))
-    n_eval = min(n_eval, len(rows) - 1)
+    n_eval = min(n_eval, len(rows) - 1) if len(rows) > 1 else 0
 
-    train_set = rows[:-n_eval]
-    eval_set = rows[-n_eval:]
+    train_set = rows[:-n_eval] if n_eval > 0 else rows
+    eval_set = rows[-n_eval:] if n_eval > 0 else []
 
     _save_jsonl(train_path, train_set)
     _save_jsonl(eval_path, eval_set)

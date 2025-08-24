@@ -7,6 +7,7 @@
 # 4. Installing dependencies for the correct hardware (CPU/CUDA).
 # 5. Authenticating the Hugging Face CLI for access to gated models.
 # 6. Optionally installing extras for document processing.
+# 7. Optionally installing GGUF conversion dependencies.
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
@@ -77,6 +78,15 @@ echo # Move to a new line
 if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "--- Installing optional 'docs' dependencies ---"
     pip install -e ".[docs]"
+fi
+
+# --- Step 7: Install Optional GGUF Conversion Dependencies ---
+echo ""
+read -p "Do you want to install support for Ollama/GGUF export (llama-cpp-python)? [y/N] " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo "--- Installing optional 'gguf' dependencies ---"
+    pip install -e ".[gguf]"
 fi
 
 echo ""

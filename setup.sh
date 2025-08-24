@@ -12,6 +12,33 @@
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
+# --- Helper function for clean, single-line command output ---
+run_and_log() {
+    local log_file
+    log_file=$(mktemp)
+    local description="$1"
+    shift
+
+    # Show initial message without a newline
+    printf "⏳ %s..." "$description"
+
+    # Run command, redirecting all output to a log file
+    if ! "$@" >"$log_file" 2>&1; then
+        # If command fails, overwrite status line with failure message
+        printf "\r❌ %s... Failed.\n" "$description"
+        echo "----------------- ERROR LOG -----------------"
+        cat "$log_file"
+        echo "-------------------------------------------"
+        rm "$log_file"
+        exit 1
+    fi
+
+    # If command succeeds, overwrite status line with success message
+    printf "\r✅ %s... Done.\n" "$description"
+    rm "$log_file"
+}
+
+
 # --- Step 1: Load .env file if it exists ---
 if [ -f ".env" ]; then
     echo "--- Sourcing .env file ---"
@@ -40,22 +67,19 @@ echo "✅ Using Python interpreter: $($PYTHON_BIN --version)"
 
 # --- Step 3: Install system build dependencies ---
 if [[ "$(uname -s)" == "Linux" ]]; then
-    # Install general build tools if missing
     if ! command -v g++ &> /dev/null || ! command -v cmake &> /dev/null; then
-        echo "--- Build tools (g++, cmake) not found. Attempting to install... ---"
-        sudo apt-get update && sudo apt-get install -y build-essential g++ cmake
+        run_and_log "Updating package list" sudo apt-get update
+        run_and_log "Installing build tools (g++, cmake)" sudo apt-get install -y build-essential g++ cmake
     fi
-    # Install CUDA Toolkit if nvidia-smi is present but nvcc is missing
     if command -v nvidia-smi &> /dev/null && ! command -v nvcc &> /dev/null; then
         echo "--- NVIDIA GPU detected, but CUDA Toolkit (nvcc) is missing. Attempting to install... ---"
-        wget https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
-        sudo dpkg -i cuda-keyring_1.1-1_all.deb
-        sudo apt-get update
+        run_and_log "Downloading CUDA keyring" wget https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
+        run_and_log "Installing CUDA keyring" sudo dpkg -i cuda-keyring_1.1-1_all.deb
+        run_and_log "Updating package list for CUDA" sudo apt-get update
         rm cuda-keyring_1.1-1_all.deb
-        sudo apt-get -y install cuda-toolkit-12-4
+        run_and_log "Installing CUDA toolkit" sudo apt-get -y install cuda-toolkit-12-4
     fi
     
-    # Ensure CUDA is in the PATH
     if [ -d "/usr/local/cuda" ]; then
         CUDA_PATH="/usr/local/cuda"
         if ! grep -q "CUDA_PATH" ~/.profile; then
@@ -65,9 +89,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
             echo "export CUDA_PATH=${CUDA_PATH}" >> ~/.profile
             echo 'export PATH="${CUDA_PATH}/bin:${PATH}"' >> ~/.profile
             echo 'export LD_LIBRARY_PATH="${CUDA_PATH}/lib64:${LD_LIBRARY_PATH}"' >> ~/.profile
-            echo "Please log out and back in for changes to take full effect."
         fi
-        # Source for the current session
         export CUDA_PATH=${CUDA_PATH}
         export PATH="${CUDA_PATH}/bin:${PATH}"
         export LD_LIBRARY_PATH="${CUDA_PATH}/lib64:${LD_LIBRARY_PATH}"
@@ -83,52 +105,40 @@ fi
 
 # --- Step 4: Create and Activate Virtual Environment ---
 if [ ! -d "$VENV_DIR" ]; then
-    echo "--- Creating virtual environment at $VENV_DIR ---"
-    "$PYTHON_BIN" -m venv "$VENV_DIR"
-else
-    echo "--- Virtual environment already exists at $VENV_DIR ---"
+    run_and_log "Creating virtual environment" "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 
 echo "--- Activating virtual environment ---"
-# shellcheck source=/dev/null
 source "$VENV_DIR/bin/activate"
 
-pip install --upgrade pip
+run_and_log "Upgrading pip" pip install --upgrade pip
 
 # --- Step 5: Install Core Dependencies ---
 echo "--- Installing project dependencies ---"
 if command -v nvidia-smi &> /dev/null; then
-    echo "✅ NVIDIA GPU detected. Installing with CUDA support..."
-    pip install --extra-index-url https://download.pytorch.org/whl/cu121 -e ".[cuda]"
+    run_and_log "Installing CUDA dependencies" pip install --extra-index-url https://download.pytorch.org/whl/cu121 -e ".[cuda]"
 else
-    echo "🖥️ No NVIDIA GPU detected. Installing with CPU support..."
-    pip install -e ".[cpu]"
+    run_and_log "Installing CPU dependencies" pip install -e ".[cpu]"
 fi
 
 # --- Step 6: Authenticate Hugging Face CLI ---
 if [ -n "${HUGGINGFACE_HUB_TOKEN:-}" ]; then
-    echo "--- Authenticating Hugging Face CLI ---"
-    hf auth login --token "$HUGGINGFACE_HUB_TOKEN" --add-to-git-credential
-else
-    echo "⚠️  Warning: HUGGINGFACE_HUB_TOKEN not found in .env. You may need to log in manually for gated models."
+    run_and_log "Authenticating Hugging Face CLI" hf auth login --token "$HUGGINGFACE_HUB_TOKEN" --add-to-git-credential
 fi
 
-# --- Step 7: Install Optional Dependencies ---
+# --- Step 7 & 8: Install Optional Dependencies ---
 echo ""
 read -p "Do you want to install support for document processing (PDF, DOCX, etc.)? [y/N] " -n 1 -r
-echo # Move to a new line
+echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "--- Installing optional 'docs' dependencies ---"
-    pip install -e ".[docs]"
+    run_and_log "Installing optional 'docs' dependencies" pip install -e ".[docs]"
 fi
 
-# --- Step 8: Install Optional GGUF Conversion Dependencies ---
 echo ""
 read -p "Do you want to install support for Ollama/GGUF export (llama-cpp-python)? [y/N] " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "--- Installing optional 'gguf' dependencies ---"
-    pip install -e ".[gguf]"
+    run_and_log "Installing optional 'gguf' dependencies" pip install -e ".[gguf]"
 fi
 
 echo ""

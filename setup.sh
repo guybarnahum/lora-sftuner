@@ -40,6 +40,7 @@ echo "✅ Using Python interpreter: $($PYTHON_BIN --version)"
 
 # --- Step 3: Install system build dependencies ---
 if [[ "$(uname -s)" == "Linux" ]]; then
+    # Install general build tools if missing
     if ! command -v g++ &> /dev/null || ! command -v cmake &> /dev/null; then
         echo "--- Build tools (g++, cmake) not found. Attempting to install... ---"
         echo "This may require you to enter your password for 'sudo'."
@@ -47,6 +48,26 @@ if [[ "$(uname -s)" == "Linux" ]]; then
     else
         echo "--- Build tools are already installed. Skipping. ---"
     fi
+    fi
+    
+    # --- FIX: Ensure CUDA is in the PATH ---
+    if [ -d "/usr/local/cuda" ]; then
+        CUDA_PATH="/usr/local/cuda"
+        if ! grep -q "CUDA_PATH" ~/.profile; then
+            echo "--- Adding CUDA to PATH in ~/.profile ---"
+            echo '' >> ~/.profile
+            echo '# Add CUDA to PATH' >> ~/.profile
+            echo "export CUDA_PATH=${CUDA_PATH}" >> ~/.profile
+            echo 'export PATH="${CUDA_PATH}/bin:${PATH}"' >> ~/.profile
+            echo 'export LD_LIBRARY_PATH="${CUDA_PATH}/lib64:${LD_LIBRARY_PATH}"' >> ~/.profile
+            echo "Please log out and back in for changes to take full effect."
+        fi
+        # Source for the current session
+        export CUDA_PATH=${CUDA_PATH}
+        export PATH="${CUDA_PATH}/bin:${PATH}"
+        export LD_LIBRARY_PATH="${CUDA_PATH}/lib64:${LD_LIBRARY_PATH}"
+    fi
+
 elif [[ "$(uname -s)" == "Darwin" ]]; then
     if ! xcode-select -p &> /dev/null; then
         echo "--- Xcode Command Line Tools not found. Attempting to install... ---"

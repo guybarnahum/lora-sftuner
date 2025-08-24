@@ -6,8 +6,9 @@ import json
 import pathlib
 import random
 import re
+from collections import Counter
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
 from tqdm import tqdm
 
@@ -90,6 +91,80 @@ def _normalize_row(row: Dict[str, Any], keep_keys: List[str]) -> Optional[Dict[s
             
     return norm_row
 
+
+def _analyze_dataset_quality(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Analyzes the unified dataset and returns a dictionary of metrics."""
+    if not rows:
+        return {}
+
+    source_counts = Counter(row.get("source_file", "unknown") for row in rows)
+    
+    single_turn_count = 0
+    multi_turn_count = 0
+    meaningful_prompts = 0
+    generic_prompts = 0
+    total_prompt_len = 0
+    total_response_len = 0
+
+    for row in rows:
+        messages = row.get("messages", [])
+        user_turns = [m for m in messages if m["role"] == "user"]
+        
+        if len(user_turns) == 1:
+            single_turn_count += 1
+        else:
+            multi_turn_count += 1
+            
+        last_prompt = user_turns[-1]["content"] if user_turns else ""
+        if last_prompt == "..." or last_prompt.lower().startswith("write a"):
+            generic_prompts += 1
+        else:
+            meaningful_prompts += 1
+            
+        total_prompt_len += len(last_prompt)
+        total_response_len += len(messages[-1]["content"])
+
+    total = len(rows)
+    return {
+        "total_examples": total,
+        "source_composition": {k: v / total for k, v in source_counts.items()},
+        "single_turn_pct": single_turn_count / total,
+        "multi_turn_pct": multi_turn_count / total,
+        "meaningful_prompt_pct": meaningful_prompts / total,
+        "generic_prompt_pct": generic_prompts / total,
+        "avg_prompt_len": total_prompt_len / total,
+        "avg_response_len": total_response_len / total,
+    }
+
+def _print_quality_report(metrics: Dict[str, Any]):
+    """Prints the formatted data quality report."""
+    if not metrics:
+        return
+
+    print("\n--- 📊 Data Quality Report ---")
+    print("Source Composition:")
+    for source, pct in metrics["source_composition"].items():
+        print(f"  - {source:<25}: {pct: >7.1%}")
+
+    print("\nConversational Quality:")
+    print(f"  - Single-Turn (Q&A):   {metrics['single_turn_pct']: >7.1%}")
+    print(f"  - Multi-Turn (Dialog): {metrics['multi_turn_pct']: >7.1%}")
+    print(f"  - Meaningful Prompts:  {metrics['meaningful_prompt_pct']: >7.1%}")
+    print(f"  - Generic Prompts:     {metrics['generic_prompt_pct']: >7.1%}")
+
+    print("\nLength Statistics (characters):")
+    print(f"  - Avg. Prompt Length:  {metrics['avg_prompt_len']:.0f}")
+    print(f"  - Avg. Response Length:{metrics['avg_response_len']:.0f}")
+
+    if metrics["generic_prompt_pct"] > 0.5:
+        print("\n⚠️  Warnings:")
+        print(f"  - High Generic Prompt Ratio ({metrics['generic_prompt_pct']:.1%}): A majority of your data consists of")
+        print("    standalone statements with a generic prompt. This can weaken the model's")
+        print("    ability to follow specific instructions.")
+        print("    Suggestion: Curate more direct Q&A examples in a separate .jsonl file.")
+    print("--------------------------------")
+
+
 # --- File I/O ---
 
 def _iter_jsonl(paths: List[pathlib.Path]) -> Iterable[Dict[str, Any]]:
@@ -97,13 +172,19 @@ def _iter_jsonl(paths: List[pathlib.Path]) -> Iterable[Dict[str, Any]]:
         with p.open("r", encoding="utf-8") as f:
             for line in f:
                 if line.strip():
-                    try: yield json.loads(line)
-                    except json.JSONDecodeError: continue
+                    try:
+                        row = json.loads(line)
+                        row["source_file"] = p.name # Add source file for analysis
+                        yield row
+                    except json.JSONDecodeError:
+                        continue
 
 def _save_jsonl(p: pathlib.Path, rows: List[Dict[str, Any]]):
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
         for ex in rows:
+            # Remove the temporary source_file key before writing
+            ex.pop("source_file", None)
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
 
 # --- Main Unify Function ---
@@ -120,7 +201,7 @@ def unify_datasets(
     
     kept, seen_hashes = [], set()
     for row in tqdm(all_rows, desc="Normalizing and deduplicating"):
-        norm_row = _normalize_row(row, keep_keys)
+        norm_row = _normalize_row(row, keep_keys + ["source_file"])
         if not norm_row: continue
         
         h = _hash_for_dedup(norm_row["messages"])
@@ -132,8 +213,14 @@ def unify_datasets(
     if shuffle:
         random.Random(seed).shuffle(kept)
 
+    # Analyze and report on the final, cleaned dataset
+    quality_metrics = _analyze_dataset_quality(kept)
+    
     _save_jsonl(output_path, kept)
     print(f"✅ Unified {len(kept)} rows from {len(all_rows)} inputs into {output_path}")
+
+    _print_quality_report(quality_metrics)
+
 
 # --- Main Split Function ---
 
@@ -161,4 +248,3 @@ def split_dataset(
     _save_jsonl(train_path, train_set)
     _save_jsonl(eval_path, eval_set)
     print(f"✅ Split {len(rows)} rows into {len(train_set)} train and {len(eval_set)} eval files.")
-

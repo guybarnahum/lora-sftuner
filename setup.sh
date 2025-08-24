@@ -3,7 +3,7 @@
 # This script automates the setup of the lora-sftuner project by:
 # 1. Sourcing the .env file for secrets.
 # 2. Finding a compatible Python version.
-# 3. Installing system build dependencies (Linux only) 
+# 3. Installing system build dependencies (Linux & macOS).
 # 4. Creating and activating a virtual environment.
 # 5. Installing dependencies for the correct hardware (CPU/CUDA).
 # 6. Authenticating the Hugging Face CLI for access to gated models.
@@ -15,7 +15,6 @@ set -e # Exit immediately if a command exits with a non-zero status.
 # --- Step 1: Load .env file if it exists ---
 if [ -f ".env" ]; then
     echo "--- Sourcing .env file ---"
-    # Use set -a to export all variables to the environment
     set -a
     source .env
     set +a
@@ -39,7 +38,7 @@ else
 fi
 echo "✅ Using Python interpreter: $($PYTHON_BIN --version)"
 
-# --- Step 3: Install system build dependencies (Linux only) ---
+# --- Step 3: Install system build dependencies ---
 if [[ "$(uname -s)" == "Linux" ]]; then
     if ! command -v g++ &> /dev/null || ! command -v cmake &> /dev/null; then
         echo "--- Build tools (g++, cmake) not found. Attempting to install... ---"
@@ -47,6 +46,14 @@ if [[ "$(uname -s)" == "Linux" ]]; then
         sudo apt-get update && sudo apt-get install -y build-essential g++ cmake
     else
         echo "--- Build tools are already installed. Skipping. ---"
+    fi
+elif [[ "$(uname -s)" == "Darwin" ]]; then
+    if ! xcode-select -p &> /dev/null; then
+        echo "--- Xcode Command Line Tools not found. Attempting to install... ---"
+        echo "Please follow the prompts in the new window to install the tools."
+        xcode-select --install
+    else
+        echo "--- Xcode Command Line Tools are already installed. Skipping. ---"
     fi
 fi
 

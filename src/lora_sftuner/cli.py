@@ -200,6 +200,7 @@ def unify(
     shuffle: bool = typer.Option(True, help="Shuffle the unified dataset."),
     seed: int = typer.Option(42, help="Random seed for shuffling."),
     keep: str = typer.Option("messages,created_at", help="Comma-separated list of keys to keep."),
+    drop_generic_prompts: bool = typer.Option(False, help="Filter out examples with generic prompts like '...'.")
 ):
     """Unifies and normalizes multiple JSONL datasets into one."""
     input_paths = inputs
@@ -223,6 +224,7 @@ def unify(
         shuffle=shuffle,
         seed=seed,
         keep_keys=keep_keys,
+        drop_generic_prompts=drop_generic_prompts,
     )
 
 @app.command("split-eval")

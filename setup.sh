@@ -12,23 +12,21 @@
 #
 set -e
 
-# ------------- Auto-yes handling (no functionality changes to steps) -------------
-AUTO_YES="${AUTO_YES:-0}"
+# ------------- Auto-yes handling (AUTO_YES is '--yes' or empty) -------------
+AUTO_YES=""
 for arg in "$@"; do
   case "$arg" in
-    --yes|-y) AUTO_YES=1 ;;
+    --yes|-y) AUTO_YES="--yes" ;;
     *) echo "Unknown option: $arg" >&2; exit 1 ;;
   esac
 done
 
 ask_yes_no() {
-  # preserves your prompts; returns 0 for yes, 1 for no
   local prompt="$1"
-  if [[ "$AUTO_YES" == "1" ]]; then
+  if [[ -n "$AUTO_YES" ]]; then
     echo "Auto-yes: $prompt -> yes"
     return 0
   fi
-  # mimic your single-char prompt behavior
   read -p "$prompt " -n 1 -r
   echo
   [[ $REPLY =~ ^[Yy]$ ]]
@@ -44,7 +42,6 @@ else
 fi
 
 cleanup_render() {
-  # Always reset color & cursor, clear active line
   printf '\r\033[K%s' "${COLOR_RESET}"
   tput cnorm 2>/dev/null || true
 }
@@ -68,20 +65,17 @@ run_and_log() {
     frames=( '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏' )
     i=0
     while :; do
-      # Read last line and strip ANSI from tool output
       local last_line=""
       if [[ -s "$log_file" ]]; then
         last_line=$(tail -n 1 "$log_file" | sed -E 's/\x1B\[[0-9;?]*[ -/]*[@-~]//g')
       fi
 
-      # Build plain text first (safe to truncate)
       local plain_prefix="${frames[i]} ${description} : "
       local plain="${plain_prefix}${last_line}"
       if (( ${#plain} > cols )); then
         plain="${plain:0:cols-1}"
       fi
 
-      # Color only the tail (the last_line portion that survived)
       local visible_tail=""
       if (( ${#plain} >= ${#plain_prefix} )); then
         visible_tail="${plain:${#plain_prefix}}"
@@ -101,7 +95,6 @@ run_and_log() {
   ) &
   local spinner_pid=$!
 
-  # Run command, capture output
   if ! "$@" >"$log_file" 2>&1; then
     kill "$spinner_pid" &>/dev/null || true
     wait "$spinner_pid" &>/dev/null || true
@@ -212,20 +205,20 @@ if [ -n "${HUGGINGFACE_HUB_TOKEN:-}" ]; then
   run_and_log "Authenticating Hugging Face CLI" hf auth login --token "$HUGGINGFACE_HUB_TOKEN" --add-to-git-credential
 fi
 
-# --- Step 7: Optional docs extras (unchanged functionality; now supports auto-yes) ---
+# --- Step 7: Optionally install document processing extras ---
 echo ""
 if ask_yes_no "Do you want to install support for document processing (PDF, DOCX, etc.)? [y/N]"; then
   run_and_log "Installing optional 'docs' dependencies" pip install -e ".[docs]"
 fi
 
-# --- Step 8: Optional llama.cpp install via setup_llama.sh (replaces llama-cpp-python extras) ---
+# --- Step 8: Optionally install llama.cpp (GGUF) via setup_llama.sh ---
 echo ""
 if ask_yes_no "Do you want to install llama.cpp for GGUF conversion (run ./setup_llama.sh)? [y/N]"; then
   if [[ -x "./setup_llama.sh" ]]; then
-    if [[ "$AUTO_YES" == "1" ]]; then
-      run_and_log "Installing llama.cpp via setup_llama.sh (auto-yes)" ./setup_llama.sh --yes
-    else
-      run_and_log "Installing llama.cpp via setup_llama.sh" ./setup_llama.sh
+    echo "Installing llama.cpp via setup_llama.sh $AUTO_YES"
+    if ! ./setup_llama.sh $AUTO_YES; then
+      echo "❌ Failed to install llama.cpp"
+      exit 1
     fi
   else
     echo "❌ setup_llama.sh not found or not executable. Place it next to this script (chmod +x setup_llama.sh)."

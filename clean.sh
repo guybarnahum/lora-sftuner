@@ -55,4 +55,12 @@ find . -type d -name "__pycache__" -exec rm -r {} +
 #     rm -rf models/
 # fi
 
+if [[ -x "./clean_llama.sh" ]]; then
+  echo "Found clean_llama.sh, calling it to remove llama.cpp installation..."
+  # Pass through any flags provided to clean.sh to clean_llama.sh
+  ./clean_llama.sh "$@"
+else
+  echo "• clean_llama.sh not found or not executable; skipping llama.cpp removal"
+fi
+
 echo "✅ Cleanup complete!"

@@ -36,19 +36,20 @@ run_and_log() {
     # Run command, redirecting all output to a log file
     if ! "$@" >"$log_file" 2>&1; then
         # Kill the spinner on failure
-        kill "$spinner_pid"
+        kill "$spinner_pid" 2>/dev/null || true
         wait "$spinner_pid" 2>/dev/null
         
         printf "\b❌ Failed.\n"
-        echo "----------------- ERROR LOG -----------------"
+        echo "ERROR LOG :"
         cat "$log_file"
-        echo "-------------------------------------------"
+        echo "END OF ERROR LOG"
         rm "$log_file"
         exit 1
     fi
 
     # Kill the spinner on success
-    kill "$spinner_pid"
+    # --- FIX: Add '|| true' to prevent script exit if spinner is already gone ---
+    kill "$spinner_pid" 2>/dev/null || true
     wait "$spinner_pid" 2>/dev/null
     
     printf "\b✅ Done.\n"
@@ -58,7 +59,7 @@ run_and_log() {
 
 # --- Step 1: Load .env file if it exists ---
 if [ -f ".env" ]; then
-    echo "--- Sourcing .env file ---"
+    echo "Sourcing .env file "
     set -a
     source .env
     set +a
@@ -68,7 +69,7 @@ VENV_DIR=".venv"
 PYTHON_BIN=""
 
 # --- Step 2: Find a compatible Python interpreter ---
-echo "--- Searching for a compatible Python version (3.11 or 3.12 preferred) ---"
+echo "Searching for a compatible Python version (3.11 or 3.12 preferred) "
 if command -v python3.11 &> /dev/null; then
     PYTHON_BIN="python3.11"
 elif command -v python3.12 &> /dev/null; then
@@ -89,7 +90,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
         run_and_log "Installing build tools (g++, cmake)" sudo apt-get install -y build-essential g++ cmake
     fi
     if command -v nvidia-smi &> /dev/null && ! command -v nvcc &> /dev/null; then
-        echo "--- NVIDIA GPU detected, but CUDA Toolkit (nvcc) is missing. Attempting to install... ---"
+        echo "NVIDIA GPU detected, but CUDA Toolkit (nvcc) is missing. Attempting to install... "
         run_and_log "Downloading CUDA keyring" wget https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
         run_and_log "Installing CUDA keyring" sudo dpkg -i cuda-keyring_1.1-1_all.deb
         run_and_log "Updating package list for CUDA" sudo apt-get update
@@ -100,7 +101,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
     if [ -d "/usr/local/cuda" ]; then
         CUDA_PATH="/usr/local/cuda"
         if ! grep -q "CUDA_PATH" ~/.profile; then
-            echo "--- Adding CUDA to PATH in ~/.profile ---"
+            echo "Adding CUDA to PATH in ~/.profile "
             echo '' >> ~/.profile
             echo '# Add CUDA to PATH' >> ~/.profile
             echo "export CUDA_PATH=${CUDA_PATH}" >> ~/.profile
@@ -115,7 +116,7 @@ fi
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
     if ! xcode-select -p &> /dev/null; then
-        echo "--- Xcode Command Line Tools not found. Attempting to install... ---"
+        echo "Xcode Command Line Tools not found. Attempting to install... "
         xcode-select --install
     fi
 fi
@@ -125,13 +126,13 @@ if [ ! -d "$VENV_DIR" ]; then
     run_and_log "Creating virtual environment" "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 
-echo "--- Activating virtual environment ---"
+echo "Activating virtual environment "
 source "$VENV_DIR/bin/activate"
 
 run_and_log "Upgrading pip" pip install --upgrade pip
 
 # --- Step 5: Install Core Dependencies ---
-echo "--- Installing project dependencies ---"
+echo "Installing project dependencies "
 if command -v nvidia-smi &> /dev/null; then
     run_and_log "Installing CUDA dependencies" pip install --extra-index-url https://download.pytorch.org/whl/cu121 -e ".[cuda]"
 else

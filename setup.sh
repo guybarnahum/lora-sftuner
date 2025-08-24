@@ -12,20 +12,34 @@
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
-# --- Helper function for clean, single-line command output ---
+# --- Helper function for clean, single-line command output with a spinner ---
 run_and_log() {
     local log_file
     log_file=$(mktemp)
     local description="$1"
     shift
 
-    # Show initial message without a newline
-    printf "⏳ %s..." "$description"
+    printf "⏳ %s  " "$description"
+
+    # Spinner animation
+    (
+        spin='|/-\'
+        while :; do
+            for i in $(seq 0 3); do
+                printf "\b%s" "${spin:$i:1}"
+                sleep 0.1
+            done
+        done
+    ) &
+    local spinner_pid=$!
 
     # Run command, redirecting all output to a log file
     if ! "$@" >"$log_file" 2>&1; then
-        # If command fails, overwrite status line with failure message
-        printf "\r❌ %s... Failed.\n" "$description"
+        # Kill the spinner on failure
+        kill "$spinner_pid"
+        wait "$spinner_pid" 2>/dev/null
+        
+        printf "\b❌ Failed.\n"
         echo "----------------- ERROR LOG -----------------"
         cat "$log_file"
         echo "-------------------------------------------"
@@ -33,8 +47,11 @@ run_and_log() {
         exit 1
     fi
 
-    # If command succeeds, overwrite status line with success message
-    printf "\r✅ %s... Done.\n" "$description"
+    # Kill the spinner on success
+    kill "$spinner_pid"
+    wait "$spinner_pid" 2>/dev/null
+    
+    printf "\b✅ Done.\n"
     rm "$log_file"
 }
 

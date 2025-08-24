@@ -43,14 +43,19 @@ if [[ "$(uname -s)" == "Linux" ]]; then
     # Install general build tools if missing
     if ! command -v g++ &> /dev/null || ! command -v cmake &> /dev/null; then
         echo "--- Build tools (g++, cmake) not found. Attempting to install... ---"
-        echo "This may require you to enter your password for 'sudo'."
         sudo apt-get update && sudo apt-get install -y build-essential g++ cmake
-    else
-        echo "--- Build tools are already installed. Skipping. ---"
     fi
+    # Install CUDA Toolkit if nvidia-smi is present but nvcc is missing
+    if command -v nvidia-smi &> /dev/null && ! command -v nvcc &> /dev/null; then
+        echo "--- NVIDIA GPU detected, but CUDA Toolkit (nvcc) is missing. Attempting to install... ---"
+        wget https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
+        sudo dpkg -i cuda-keyring_1.1-1_all.deb
+        sudo apt-get update
+        rm cuda-keyring_1.1-1_all.deb
+        sudo apt-get -y install cuda-toolkit-12-4
     fi
     
-    # --- FIX: Ensure CUDA is in the PATH ---
+    # Ensure CUDA is in the PATH
     if [ -d "/usr/local/cuda" ]; then
         CUDA_PATH="/usr/local/cuda"
         if ! grep -q "CUDA_PATH" ~/.profile; then
@@ -67,14 +72,12 @@ if [[ "$(uname -s)" == "Linux" ]]; then
         export PATH="${CUDA_PATH}/bin:${PATH}"
         export LD_LIBRARY_PATH="${CUDA_PATH}/lib64:${LD_LIBRARY_PATH}"
     fi
+fi
 
-elif [[ "$(uname -s)" == "Darwin" ]]; then
+if [[ "$(uname -s)" == "Darwin" ]]; then
     if ! xcode-select -p &> /dev/null; then
         echo "--- Xcode Command Line Tools not found. Attempting to install... ---"
-        echo "Please follow the prompts in the new window to install the tools."
         xcode-select --install
-    else
-        echo "--- Xcode Command Line Tools are already installed. Skipping. ---"
     fi
 fi
 

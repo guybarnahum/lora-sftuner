@@ -66,6 +66,7 @@ fi
 # --- Step 5: Authenticate Hugging Face CLI ---
 if [ -n "${HUGGINGFACE_HUB_TOKEN:-}" ]; then
     echo "--- Authenticating Hugging Face CLI ---"
+    hf auth login --token "$HUGGINGFACE_HUB_TOKEN" --add-to-git-credential
 else
     echo "⚠️  Warning: HUGGINGFACE_HUB_TOKEN not found in .env. You may need to log in manually for gated models."
 fi

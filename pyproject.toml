@@ -28,7 +28,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Defines an "extra" for CUDA environments (e.g., cloud GPU VMs).
-# Install with: pip install --index-url https://download.pytorch.org/whl/cu121 -e ".[cuda]"
+# Install with: pip install --extra-index-url https://download.pytorch.org/whl/cu121 -e ".[cuda]"
 cuda = [
     "torch==2.4.1",
     "bitsandbytes>=0.43.3",
@@ -49,6 +49,13 @@ docs = [
     "beautifulsoup4>=4.12.3",
     "python-docx>=1.1.2",
     "PyMuPDF>=1.24.5",
+]
+
+# --- ADD THIS SECTION ---
+# Defines an "extra" for GGUF conversion for Ollama.
+# Install with: pip install -e ".[gguf]"
+gguf = [
+    "llama-cpp-python>=0.2.79",
 ]
 
 

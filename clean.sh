@@ -19,12 +19,12 @@ if [ -d "$VENV_DIR" ]; then
     # shellcheck source=/dev/null
     source "$VENV_DIR/bin/activate"
     
-    # Check if huggingface-cli is installed before trying to log out
-    if command -v huggingface-cli &> /dev/null; then
+    # Check if hf command is installed before trying to log out
+    if command -v hf &> /dev/null; then
         echo "--- Logging out of Hugging Face CLI ---"
-        huggingface-cli logout
+        hf auth logout
     else
-        echo "--- huggingface-cli not found, skipping logout ---"
+        echo "--- hf command not found, skipping logout ---"
     fi
     
     echo "--- Uninstalling pip package ---"

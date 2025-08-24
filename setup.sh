@@ -3,10 +3,11 @@
 # This script automates the setup of the lora-sftuner project by:
 # 1. Sourcing the .env file for secrets.
 # 2. Finding a compatible Python version.
-# 3. Creating and activating a virtual environment.
 # 3. Installing system build dependencies (Linux only) 
 # 4. Creating and activating a virtual environment.
 # 5. Installing dependencies for the correct hardware (CPU/CUDA).
+# 6. Authenticating the Hugging Face CLI for access to gated models.
+# 7. Optionally installing extras for document processing.
 # 8. Optionally installing GGUF conversion dependencies.
 
 set -e # Exit immediately if a command exits with a non-zero status.

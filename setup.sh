@@ -4,10 +4,10 @@
 # 1. Sourcing the .env file for secrets.
 # 2. Finding a compatible Python version.
 # 3. Creating and activating a virtual environment.
-# 4. Installing dependencies for the correct hardware (CPU/CUDA).
-# 5. Authenticating the Hugging Face CLI for access to gated models.
-# 6. Optionally installing extras for document processing.
-# 7. Optionally installing GGUF conversion dependencies.
+# 3. Installing system build dependencies (Linux only) 
+# 4. Creating and activating a virtual environment.
+# 5. Installing dependencies for the correct hardware (CPU/CUDA).
+# 8. Optionally installing GGUF conversion dependencies.
 
 set -e # Exit immediately if a command exits with a non-zero status.
 
@@ -38,8 +38,18 @@ else
 fi
 echo "✅ Using Python interpreter: $($PYTHON_BIN --version)"
 
+# --- Step 3: Install system build dependencies (Linux only) ---
+if [[ "$(uname -s)" == "Linux" ]]; then
+    if ! command -v g++ &> /dev/null || ! command -v cmake &> /dev/null; then
+        echo "--- Build tools (g++, cmake) not found. Attempting to install... ---"
+        echo "This may require you to enter your password for 'sudo'."
+        sudo apt-get update && sudo apt-get install -y build-essential g++ cmake
+    else
+        echo "--- Build tools are already installed. Skipping. ---"
+    fi
+fi
 
-# --- Step 3: Create and Activate Virtual Environment ---
+# --- Step 4: Create and Activate Virtual Environment ---
 if [ ! -d "$VENV_DIR" ]; then
     echo "--- Creating virtual environment at $VENV_DIR ---"
     "$PYTHON_BIN" -m venv "$VENV_DIR"
@@ -53,7 +63,7 @@ source "$VENV_DIR/bin/activate"
 
 pip install --upgrade pip
 
-# --- Step 4: Install Core Dependencies ---
+# --- Step 5: Install Core Dependencies ---
 echo "--- Installing project dependencies ---"
 if command -v nvidia-smi &> /dev/null; then
     echo "✅ NVIDIA GPU detected. Installing with CUDA support..."
@@ -63,7 +73,7 @@ else
     pip install -e ".[cpu]"
 fi
 
-# --- Step 5: Authenticate Hugging Face CLI ---
+# --- Step 6: Authenticate Hugging Face CLI ---
 if [ -n "${HUGGINGFACE_HUB_TOKEN:-}" ]; then
     echo "--- Authenticating Hugging Face CLI ---"
     hf auth login --token "$HUGGINGFACE_HUB_TOKEN" --add-to-git-credential
@@ -71,7 +81,7 @@ else
     echo "⚠️  Warning: HUGGINGFACE_HUB_TOKEN not found in .env. You may need to log in manually for gated models."
 fi
 
-# --- Step 6: Install Optional Dependencies ---
+# --- Step 7: Install Optional Dependencies ---
 echo ""
 read -p "Do you want to install support for document processing (PDF, DOCX, etc.)? [y/N] " -n 1 -r
 echo # Move to a new line
@@ -80,7 +90,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     pip install -e ".[docs]"
 fi
 
-# --- Step 7: Install Optional GGUF Conversion Dependencies ---
+# --- Step 8: Install Optional GGUF Conversion Dependencies ---
 echo ""
 read -p "Do you want to install support for Ollama/GGUF export (llama-cpp-python)? [y/N] " -n 1 -r
 echo

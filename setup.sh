@@ -21,14 +21,17 @@ run_and_log() {
 
     printf "⏳ %s  " "$description"
 
+    # Hide cursor
+    tput civis 2>/dev/null || true
+
     # Spinner animation
     (
-        spin='|/-\'
+        frames=( '⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏' )
+        i=0
         while :; do
-            for i in $(seq 0 3); do
-                printf "\b%s" "${spin:$i:1}"
-                sleep 0.1
-            done
+            printf '\r%s' "${frames[i]}"
+            i=$(( (i + 1) % ${#frames[@]} ))
+            sleep 0.08
         done
     ) &
     local spinner_pid=$!
@@ -36,8 +39,8 @@ run_and_log() {
     # Run command, redirecting all output to a log file
     if ! "$@" >"$log_file" 2>&1; then
         # Kill the spinner on failure
-        kill "$spinner_pid" 2>/dev/null || true
-        wait "$spinner_pid" 2>/dev/null
+        kill "$spinner_pid" &>/dev/null || true
+        wait "$spinner_pid" &>/dev/null || true
         
         printf "\b❌ Failed.\n"
         echo "ERROR LOG :"
@@ -48,10 +51,11 @@ run_and_log() {
     fi
 
     # Kill the spinner on success
-    # --- FIX: Add '|| true' to prevent script exit if spinner is already gone ---
-    kill "$spinner_pid" 2>/dev/null || true
-    wait "$spinner_pid" 2>/dev/null
+    kill "$spinner_pid" &>/dev/null || true
+    wait "$spinner_pid" &>/dev/null || true
     
+    # Restore cursor
+    tput cnorm 2>/dev/null || true
     printf "\b✅ Done.\n"
     rm "$log_file"
 }

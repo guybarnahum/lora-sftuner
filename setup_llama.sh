@@ -253,6 +253,48 @@ if [[ "$NEED_EXPORT" == "true" ]]; then
   fi
 fi
 
+# ---------- Publish LLAMA_CPP_HOME (now + persist) ----------
+# Make it available to the rest of this script (and any child processes)
+export LLAMA_CPP_HOME="$LLAMA_DIR"
+
+# Persist across reboots / new shells.
+# We’ll update whichever RC applies + also write to both common files if they exist.
+persist_llama_home() {
+  local line='export LLAMA_CPP_HOME="'"$LLAMA_DIR"'"'
+  local wrote=0
+
+  # Helper: idempotently append to a file
+  _append_once() {
+    local file="$1"
+    local text="$2"
+    [[ -z "$file" || -z "$text" ]] && return 0
+    # Only append if not already present (exact match)
+    if [[ -f "$file" ]]; then
+      if ! grep -Fxq "$text" "$file"; then
+        printf '\n# Added by setup_llama.sh\n%s\n' "$text" >> "$file"
+        echo "✅ Added LLAMA_CPP_HOME to $file"
+        wrote=1
+      fi
+    fi
+  }
+
+  # Primary RC we already picked above for PATH edits
+  _append_once "$SHELL_RC" "$line"
+
+  # Also add to common files if they exist (safe & idempotent)
+  [[ -f "$HOME/.bashrc"  ]] && _append_once "$HOME/.bashrc"  "$line"
+  [[ -f "$HOME/.zshrc"   ]] && _append_once "$HOME/.zshrc"   "$line"
+  [[ -f "$HOME/.profile" ]] && _append_once "$HOME/.profile" "$line"
+
+  if [[ "$wrote" -eq 0 ]]; then
+    echo "ℹ️  LLAMA_CPP_HOME already present in your shell rc files."
+  else
+    echo "ℹ️  Open a new shell or run: source \"$SHELL_RC\""
+  fi
+}
+
+persist_llama_home
+
 # ---------- Python venv ----------
 if [[ ! -d "$PY_VENV_DIR" ]]; then
   run_and_log "Creating Python venv for conversion tools" "$PYTHON_BIN" -m venv "$PY_VENV_DIR"

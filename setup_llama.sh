@@ -177,7 +177,7 @@ if [[ "$OS" == "Linux" ]]; then
       USE_OPENBLAS="true"
     fi
     if [[ "$HAVE_CUDA" == "true" ]] && ! command -v nvcc >/dev/null 2>&1; then
-      echo "⚠️  CUDA detected (nvidia-smi), but nvcc not found. Building with LLAMA_CUBLAS=ON anyway."
+      echo "⚠️  CUDA detected (nvidia-smi), but nvcc not found. Building with GGML_CUDA=ON anyway."
     fi
   else
     echo "⚠️ Non-apt Linux—ensure git, cmake, g++, make, python venv are installed."
@@ -209,10 +209,10 @@ fi
 
 # ---------- Configure acceleration flags ----------
 if [[ "$OS" == "Linux" ]]; then
-  [[ "$HAVE_CUDA" == "true" ]] && CMAKE_FLAGS+=("-DLLAMA_CUBLAS=ON")
-  [[ "$USE_OPENBLAS" == "true" ]] && CMAKE_FLAGS+=("-DLLAMA_BLAS=ON" "-DLLAMA_BLAS_VENDOR=OpenBLAS")
+  [[ "$HAVE_CUDA" == "true" ]] && CMAKE_FLAGS+=("-DGGML_CUDA=ON")
+  [[ "$USE_OPENBLAS" == "true" ]] && CMAKE_FLAGS+=("-DGGML_BLAS=ON" "-DGGML_BLAS_VENDOR=OpenBLAS")
 elif [[ "$OS" == "Darwin" ]]; then
-  [[ "$HAVE_METAL" == "true" ]] && CMAKE_FLAGS+=("-DLLAMA_METAL=ON")
+  [[ "$HAVE_METAL" == "true" ]] && CMAKE_FLAGS+=("-DGGML_METAL=ON")
 fi
 
 # ---------- Build llama.cpp ----------
@@ -339,4 +339,3 @@ echo ""
 echo "Tip: Use your pyproject extras to control Torch versions:"
 echo "  macOS:   pip install -e '.[cpu]'    # (Torch 2.2.2 per your file)"
 echo "  Linux+GPU: pip install --extra-index-url https://download.pytorch.org/whl/cu121 -e '.[cuda]'"
-

@@ -166,7 +166,7 @@ if [[ "$OS" == "Linux" ]]; then
   if command -v apt-get >/dev/null 2>&1; then
     run_and_log "Updating apt package list" sudo apt-get update
     run_and_log "Installing build tools (git, cmake, g++, make, python-venv)" \
-      sudo apt-get install -y git cmake build-essential g++ make python3-venv python3-pip pkg-config ccache
+      sudo apt-get install -y git cmake build-essential g++ make python3-venv python3-pip pkg-config ccache libcurl4-openssl-dev zlib1g-dev
 
     if ! dpkg -s libopenblas-dev >/dev/null 2>&1; then
       read -r -p "Install OpenBLAS for faster CPU builds? [y/N] " REPLY_OB

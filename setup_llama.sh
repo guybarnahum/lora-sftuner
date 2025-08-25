@@ -257,6 +257,12 @@ fi
 # Make it available to the rest of this script (and any child processes)
 export LLAMA_CPP_HOME="$LLAMA_DIR"
 
+echo ""
+echo "LLAMA_CPP_HOME has been set to: $LLAMA_CPP_HOME"
+echo "It has been added to your shell rc file for future sessions."
+echo "For this session, run: export LLAMA_CPP_HOME=\"$LLAMA_CPP_HOME\""
+echo "Or simply: source ~/.bashrc (or open a new shell) to load it."
+
 # Persist across reboots / new shells.
 # We’ll update whichever RC applies + also write to both common files if they exist.
 persist_llama_home() {

@@ -1,10 +1,11 @@
 # LoRA-SFTuner — LLM Fine-Tuning Toolkit
+
 ## Raw data → Unified dataset → Train/Eval split → Train LoRA → Merge/Export
 
-**lora-sftuner** is a modular toolkit for creating personalized language models. It provides an end-to-end pipeline to import data from your archives, turn it into a high-quality Supervised Fine-Tuning (SFT) dataset, **train a LoRA adapter**, and optionally **merge/export** for inference tools like **Ollama**.
+**lora-sftuner** is a modular toolkit for creating personalized language models. It provides an end-to-end pipeline to import data from your archives, turn it into a high-quality Supervised Fine-Tuning (SFT) dataset, **train a LoRA adapter**, and optionally **merge/export** for inference tools like **Ollama** (via **llama.cpp** GGUF).
 
 * **Python:** 3.11–3.12
-* **Platforms:** macOS / Linux (+GPU)(Windows via WSL untested)
+* **Platforms:** macOS / Linux (+GPU) (Windows via WSL untested)
 
 ---
 
@@ -14,6 +15,8 @@
 2. [Quick Start](#quick-start)
 
    * [Install](#install)
+   * [Install llama.cpp (GGUF converter)](#install-llamacpp-gguf-converter)
+   * [Install Ollama](#install-ollama)
    * [Clean Up](#clean-up)
 3. [Configuration](#configuration)
 4. [The Data Pipeline](#the-data-pipeline)
@@ -48,6 +51,7 @@
 * **Robust Setup**
 
   * `setup.sh` checks Python, creates a virtualenv, and installs core + optional extras
+  * Optional one-shot installers for **llama.cpp** and **Ollama**
 
 * **Hierarchical Configuration**
 
@@ -55,7 +59,7 @@
 
 * **Complete Workflow**
 
-  * **Raw data → Unified dataset → Train/Eval split → Train LoRA → Merge/Export**
+  * **Raw data → Unified dataset → Train/Eval split → Train LoRA → Merge/Export (GGUF)**
 
 ---
 
@@ -69,24 +73,112 @@ The `setup.sh` script automates everything.
 # Make the script executable
 chmod +x setup.sh
 
-# Run the setup
+# Run the setup (prompts for optional components)
 ./setup.sh
+
+# Auto-yes for optional prompts:
+AUTO_YES=1 ./setup.sh
+# or
+./setup.sh --yes
 ```
 
 What it does:
 
 * Finds a compatible Python (prefers 3.11/3.12)
 * Creates a virtual environment at `./.venv`
-* Installs required dependencies (CPU/CUDA variants)
+* Installs required dependencies (CPU or CUDA variants)
 * Offers optional document parsers (`.pdf`, `.docx`, etc.)
+* Offers to install **llama.cpp** (for GGUF) and **Ollama** (runtime)
+
+---
+
+### Install llama.cpp (GGUF converter)
+
+This project uses `llama.cpp` to convert merged HF models to **GGUF** and to quantize them.
+Use the dedicated script:
+
+```bash
+chmod +x setup_llama.sh
+./setup_llama.sh
+# Non-interactive:
+AUTO_YES=1 ./setup_llama.sh
+```
+
+What it does:
+
+* Detects your platform:
+
+  * **Linux + NVIDIA**: builds with `GGML_CUDA=ON`
+  * **macOS Apple Silicon**: builds with `GGML_METAL=ON`
+  * **CPU** fallback otherwise
+* Installs build deps (apt/Homebrew) and fixes common CMake deps
+
+  * Linux includes: `pkg-config`, `libcurl4-openssl-dev`, `zlib1g-dev`, etc.
+* Builds `llama-cli`, `llama-quantize`, `llama-server`
+* Creates a Python venv under `~/llama.cpp/.venv` for the converter script
+* Installs converter Python deps from **PyPI** only (no Torch required)
+* Symlinks binaries to `~/.local/bin`
+* Sets and **persists** `LLAMA_CPP_HOME` to your shell rc (e.g. `~/.bashrc`/`~/.zshrc`)
+
+After install, open a new shell (or `source ~/.bashrc` / `source ~/.zshrc`), then:
+
+```bash
+llama-cli --version
+echo "$LLAMA_CPP_HOME"
+```
+
+> If your shell can’t find `llama-cli`, ensure `~/.local/bin` is in `PATH` (the script offers to add it).
+
+---
+
+### Install Ollama
+
+Ollama is optional but recommended for quick local serving of GGUF models.
+
+```bash
+chmod +x setup_ollama.sh
+./setup_ollama.sh
+# Non-interactive:
+AUTO_YES=1 ./setup_ollama.sh
+```
+
+What it does:
+
+* **Linux**: Installs via official script, enables & starts the systemd service
+* **macOS**: Installs via Homebrew (or official script if Homebrew is missing)
+* Ensures the Homebrew bin dir is in your **current** PATH and persists it for **future** shells
+* Prints `ollama --version` and optional GPU hints on Linux
+
+> To start manually (if needed): `ollama serve`
+> Example test: `ollama pull llama3:8b` then `ollama run llama3:8b -q "hi"`
+
+---
 
 ### Clean Up
 
-Remove the virtual environment and uninstall the package:
+**Core project** (virtualenv, package):
 
 ```bash
 chmod +x clean.sh
 ./clean.sh
+```
+
+**llama.cpp** (binaries, venv, PATH export, env var):
+
+```bash
+chmod +x clean_llama.sh
+./clean_llama.sh
+# Non-interactive:
+AUTO_YES=1 ./clean_llama.sh
+```
+
+**Ollama** (service + binary + optional `~/.ollama` models/cache):
+
+```bash
+chmod +x clean_ollama.sh
+./clean_ollama.sh
+# Non-interactive:
+AUTO_YES=1 ./clean_ollama.sh
 ```
 
 ---
@@ -105,6 +197,7 @@ cp .env.example .env
   * `HUGGINGFACE_HUB_TOKEN`
   * `TWITTER_BEARER_TOKEN`
   * `TWITTER_USERNAME`
+
 * **`config.yaml`** — defaults for base model, training presets, paths, etc.
   Adjust to match your hardware and preferences.
 
@@ -137,7 +230,6 @@ Run one or more importers:
   ```bash
   # If you skipped docs extras during setup:
   # pip install -e ".[docs]"
-
   lora-sftuner docs-import /path/to/your/documents/
   ```
 
@@ -206,7 +298,7 @@ lora-sftuner infer "Tell me a story." --adapter-dir out/another-adapter
 ### Merging & Exporting for Ollama
 
 Merge the LoRA adapter into the base model to create a standalone, fine-tuned model.
-You can also produce GGUF + a Modelfile for Ollama in one step.
+You can also produce **GGUF** + a **Modelfile** for Ollama in one step.
 
 ```bash
 # Merge the adapter into the base model
@@ -216,11 +308,17 @@ lora-sftuner merge
 lora-sftuner merge --gguf-quantize q4_k_m
 ```
 
-This creates a directory (default: `out/merged-model`) with merged weights and a `Modelfile`.
+Under the hood the tool will:
+
+1. Load the base model + LoRA adapter, then **merge** and save an HF model under `out/merged` (default).
+2. Use **llama.cpp**’s converter (`convert_hf_to_gguf.py`) from `LLAMA_CPP_HOME` to produce a `.gguf` file.
+3. Optionally **quantize** it with `llama-quantize`.
+4. Write a simple **Modelfile** (so you can `ollama create` quickly).
+
 Run with Ollama:
 
 ```bash
-ollama create my-personal-model -f out/merged-model/Modelfile
+ollama create my-personal-model -f out/merged/Modelfile
 ollama run my-personal-model "Say something in my style."
 ```
 
@@ -248,12 +346,41 @@ schema_mapping:
 ## Notes & Tips
 
 * **Virtualenv activation:** `source .venv/bin/activate` before running commands manually.
+
 * **Docs extras:** If you skipped document parsers during setup, install later:
 
   ```bash
   pip install -e ".[docs]"
   ```
-* **Idempotency:** Importers track state and only process new/changed content where applicable.
-* **Environment variables:** Missing tokens in `.env` will cause importer errors—verify and reload your shell.
-* **CLI help:** Use `lora-sftuner <command> --help` to see all options and overrides.
 
+* **Idempotency:** Importers track state and only process new/changed content where applicable.
+
+* **Environment variables:**
+
+  * Ensure `.env` has required tokens; reload your shell after edits.
+  * `setup_llama.sh` **exports** and **persists** `LLAMA_CPP_HOME` to your shell rc.
+  * `setup_llama.sh` also offers to add `~/.local/bin` to your PATH for the llama binaries.
+
+* **Linux build deps for llama.cpp:** If you’re building manually, the script already installs these, but FYI:
+
+  ```bash
+  sudo apt-get install -y git cmake build-essential g++ make python3-venv python3-pip pkg-config ccache \
+                          libcurl4-openssl-dev zlib1g-dev libopenblas-dev
+  ```
+
+* **Troubleshooting (Linux):**
+
+  * Missing `pkg-config` / `libcurl` → rerun `setup_llama.sh` or install the packages above.
+  * CUDA is detected via `nvidia-smi`. `nvcc` is not required for `GGML_CUDA=ON`.
+  * If you see `openblas64 not found` but `openblas found` that’s OK—OpenBLAS will still be used.
+
+* **macOS PATH / Homebrew:**
+
+  * `setup_ollama.sh` ensures `$(brew --prefix)/bin` is added to your PATH (current session and `~/.zshrc`).
+  * If you still can’t find `ollama`, open a new terminal or `source ~/.zshrc`.
+
+* **CLI help:** `lora-sftuner <command> --help` shows all options and overrides.
+
+---
+
+Happy tinkering!
